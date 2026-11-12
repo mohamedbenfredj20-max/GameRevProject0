@@ -1,0 +1,5 @@
+workspace/
+__pycache__/
+*.apk
+*.zip
+.DS_Store
