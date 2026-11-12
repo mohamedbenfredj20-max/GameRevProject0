@@ -4,18 +4,26 @@
 
 ## 📂 هيكل المشروع
 - `setup.py`: تجهيز البيئة بالكامل (المجلدات، تنزيل APK وأصول CDN من Google Drive، استنساخ الأدوات).
+- `AGENTS.md`: تعليمات الوكيل (Antigravity) لسير العمل وقواعد التحليل.
 - `backup.py`: ضغط `workspace/output/` ورفعه إلى Google Drive عبر `rclone`.
 - `workspace/input/`: ملفات الإدخال الخام (`game.apk`, `assets.zip`). مستبعد من Git عبر `.gitignore`.
 - `workspace/output/`: نتائج ومخرجات التحليل (مستبعد من Git أيضاً، لذا استخدم `backup.py`).
 - `tools/`: أدوات التحليل المستنسخة تلقائياً:
   - [REA](https://github.com/morluto/rea)
-  - [AssetRipper](https://github.com/AssetRipper/AssetRipper)
+  - [AssetRipper](https://github.com/AssetRipper/AssetRipper) (مصدر، يحتاج .NET SDK للبناء)
+  - [JADX](https://github.com/skylot/jadx) (يُنزَّل تلقائياً، يحتاج JDK)
 
 ## 🚀 التشغيل في أي جلسة RDP جديدة
 ```bash
 python setup.py
 ```
-يثبّت `gdown` تلقائياً، وينزّل الملفات، ويستنسخ الأدوات. الملفات الموجودة مسبقاً تُتخطى.
+يفحص المتطلبات (git, node, java)، ينزّل الملفات عبر `gdown`، يجهّز الأدوات، ثم يكتشف هل اللعبة Unity بنمط IL2CPP أم Mono. الملفات الموجودة مسبقاً تُتخطى.
+
+**خطوة يدوية لمرة واحدة:** لربط REA بالوكيل شغّل من مجلد خارج المشروع:
+```bash
+npx rea-agents setup
+```
+يتطلب Node.js 22.23.4+ أو 24.22.1+ أو 26.12.1+.
 
 ## 🔍 سير العمل
 1. شغّل `python setup.py`.
