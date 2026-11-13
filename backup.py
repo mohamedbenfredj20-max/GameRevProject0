@@ -31,3 +31,24 @@ def create_output_backup():
     except Exception as e:
         print(f"[-] خطأ أثناء الضغط: {e}")
         return False
+
+
+def upload_to_gdrive():
+    if not create_output_backup():
+        return False
+    if shutil.which("rclone") is None:
+        print("[-] لم يتم الرفع: أداة rclone غير مثبتة.")
+        print("    ثبّتها (https://rclone.org/install/) ثم شغّل: rclone config")
+        print(f"    الملف جاهز يدوياً هنا: {BACKUP_FILE}")
+        return False
+    print("[+] جاري الرفع إلى Google Drive...")
+    result = subprocess.run(["rclone", "copy", BACKUP_FILE, RCLONE_REMOTE])
+    if result.returncode == 0:
+        print("[+] تم الرفع بنجاح.")
+        return True
+    print("[-] فشل الرفع، تحقق من إعداد rclone (اسم الـ remote).")
+    return False
+
+
+if __name__ == "__main__":
+    upload_to_gdrive()
