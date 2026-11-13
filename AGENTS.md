@@ -1,28 +1,35 @@
 # تعليمات الوكيل (Agent Instructions)
 
-مشروع **تعليمي** للهندسة العكسية للعبة أندرويد مبنية بـ **Unity**. الهدف فهم كيف تعمل اللعبة، لا نشر أصولها ولا الغش.
+مشروع **تعليمي** للهندسة العكسية للعبة أندرويد مبنية بـ **Unity** بنمط **IL2CPP** (مؤكد: يوجد `libil2cpp.so` و`global-metadata.dat`، ولا يوجد Mono).
+
+> ⚠️ هذا الملف هو الأساسي لهذا المشروع. تجاهل `tools/rea/AGENTS.md` فهو لتطوير أداة REA نفسها.
 
 ## القواعد
-- لا تعدّل شيئاً في `workspace/input/` (للقراءة فقط).
-- احفظ كل النتائج في `workspace/output/` داخل مجلدات منظمة (`apk/`, `assets/`, `code/`, `notes/`).
-- اكتب ما تكتشفه في `workspace/output/notes/findings.md` مع الدليل (اسم الملف، الدالة، السطر).
-- فرّق دائماً بين ما **تأكدت منه** وما هو **تخمين**.
-- لا تحاول تجاوز حماية أو تعديل اللعبة للغش أو التفاعل مع خوادمها الحية.
+- `workspace/input/` للقراءة فقط، ولا تعدّل الـ APK.
+- احفظ النتائج في `workspace/output/` (مجلدات: `01_manifest`, `02_il2cpp`, `03_cdn_assets`, `04_notes`).
+- لا تنسخ ملفات من الـ APK إلى المخرجات (مثل `libil2cpp.so` و`global-metadata.dat`)، بل أشِر إلى مسارها في `input`.
+- كل استنتاج يُكتب في `workspace/output/04_notes/findings.md` مع **الدليل** (اسم الملف + الصنف/الدالة)، وفرّق بين المؤكد والتخمين.
+- لا تتفاعل مع خوادم اللعبة الحية، ولا تحاول تجاوز حماية أو الغش.
 
-## الملفات
-- `workspace/input/game.apk`: حزمة اللعبة.
-- `workspace/input/assets.zip`: أصول CDN (غالباً AssetBundles).
-- `tools/jadx/`: فك كود Java/Kotlin وبيان الـ Manifest (`tools/jadx/bin/jadx`).
-- `tools/AssetRipper/`: استخراج أصول Unity (مستودع مصدري يحتاج بناء بـ .NET SDK).
-- `tools/rea/`: خادم MCP للهندسة العكسية (يُفعَّل عبر `npx rea-agents setup`).
+## الأدوات
+- `tools/Il2CppDumper/`: يستخرج `dump.cs` و`script.json` و`il2cpp.h` و`DummyDll/`.
+  ```
+  Il2CppDumper.exe <libil2cpp.so> <global-metadata.dat> <مجلد الإخراج>
+  ```
+  المسار داخل الـ APK: `lib/arm64-v8a/libil2cpp.so` و`assets/bin/Data/Managed/Metadata/global-metadata.dat`.
+- `tools/jadx/`: لـ `AndroidManifest.xml` وكود Java/Kotlin الخاص بأندرويد.
+- `tools/AssetRipper/`: لأصول Unity (يحتاج بناء بـ .NET SDK).
+- `tools/rea/`: خادم MCP للتحليل (`npx rea-agents setup`).
 
-## سير العمل المقترح
-1. **الاستطلاع:** افتح الـ APK كملف zip، اقرأ `AndroidManifest.xml` عبر JADX، سجّل الحزمة والإصدار والصلاحيات.
-2. **نمط الكود:** هل يوجد `libil2cpp.so` + `global-metadata.dat` (IL2CPP) أم `Assembly-CSharp.dll` (Mono)؟
-   - Mono: حلّل الـ DLL مباشرة.
-   - IL2CPP: استخدم Il2CppDumper لاستخراج أسماء الأصناف والدوال.
-3. **الأصول:** افحص `assets.zip` (AssetBundles) وحلّلها بـ AssetRipper.
-4. **التوثيق:** لخّص بنية اللعبة (المشاهد، الأنظمة، تدفق البيانات) في `notes/`.
+## ما نعرفه حالياً
+- `DummyDll/` و`dump.cs` يعطيان **أسماء الأصناف والدوال وتواقيعها فقط**، وليس منطق الدوال.
+- المنطق الفعلي داخل `libil2cpp.so` كلغة آلة ARM64؛ لقراءته استخدم Ghidra/IDA مع `script.json` و`il2cpp.h`.
+
+## سير العمل
+1. اطرح سؤالاً محدداً (مثال: كيف تُحمَّل بيانات البطاقات؟).
+2. ابحث عنه في `dump.cs`، ثم افتح الـ DLL المناسب (مثل `Game.dll`) في ILSpy/dnSpy لفهم البنية.
+3. للمنطق الداخلي، حدّد عنوان الدالة من `script.json` وحلله في Ghidra.
+4. دوّن النتيجة والدليل في `findings.md`.
 
 ## أسلوب التقرير
-أجب بالعربية، بإيجاز، مع قائمة بالملفات التي أنتجتها وأين وجدت كل معلومة.
+بالعربية، موجز، مع قائمة بالملفات المنتجة ومسار كل معلومة.
