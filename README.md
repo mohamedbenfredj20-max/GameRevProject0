@@ -12,12 +12,13 @@
   - [REA](https://github.com/morluto/rea)
   - [AssetRipper](https://github.com/AssetRipper/AssetRipper) (مصدر، يحتاج .NET SDK للبناء)
   - [JADX](https://github.com/skylot/jadx) (يُنزَّل تلقائياً، يحتاج JDK)
+  - [Il2CppDumper](https://github.com/Perfare/Il2CppDumper) (يُنزَّل تلقائياً، لألعاب Unity بنمط IL2CPP)
 
 ## 🚀 التشغيل في أي جلسة RDP جديدة
 ```bash
 python setup.py
 ```
-يفحص المتطلبات (git, node, java)، ينزّل الملفات عبر `gdown`، يجهّز الأدوات، ثم يكتشف هل اللعبة Unity بنمط IL2CPP أم Mono. الملفات الموجودة مسبقاً تُتخطى.
+يفحص المتطلبات (git, node, java)، ينزّل الملفات عبر `gdown`، يجهّز الأدوات، ثم يكتشف هل اللعبة Unity بنمط IL2CPP أم Mono. (اللعبة الحالية: IL2CPP.) الملفات الموجودة مسبقاً تُتخطى.
 
 **خطوة يدوية لمرة واحدة:** لربط REA بالوكيل شغّل من مجلد خارج المشروع:
 ```bash
@@ -35,6 +36,8 @@ npx rea-agents setup
 1. ثبّت [rclone](https://rclone.org/install/).
 2. شغّل `rclone config` وأنشئ remote باسم `gdrive`.
 3. شغّل `python backup.py`.
+
+النسخ الاحتياطي يستثني `libil2cpp.so` و`global-metadata.dat` لأنهما موجودان أصلاً في الـ APK.
 
 لاسترجاع المخرجات في جلسة جديدة: ارفع `outputs_backup.zip` إلى Drive، وضع معرّفه في `OUTPUTS_BACKUP_ID` داخل `setup.py`.
 
