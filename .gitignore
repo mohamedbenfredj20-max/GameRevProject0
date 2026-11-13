@@ -1,4 +1,5 @@
 workspace/
+tools/
 __pycache__/
 *.apk
 *.zip
