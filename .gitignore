@@ -4,3 +4,12 @@ __pycache__/
 *.apk
 *.zip
 .DS_Store
+
+# rclone credentials/tokens must NEVER be committed
+rclone.conf
+*.rclone.conf
+token*.json
+
+# Local patch backups and Python cache files
+*.bak
+*.py[cod]

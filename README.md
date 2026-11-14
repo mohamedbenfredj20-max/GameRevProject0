@@ -1,45 +1,136 @@
 # Game Reverse Engineering Pipeline (GameRevProject0)
 
-بيئة عمل مؤتمتة للهندسة العكسية لألعاب الأندرويد بغرض التعلم، مصممة للعمل في بيئات RDP المؤقتة مع مزامنة الملفات والأدوات تلقائياً.
+بيئة عمل مؤتمتة للهندسة العكسية لألعاب الأندرويد بغرض التعلم، مصممة للعمل في بيئات RDP المؤقتة. عند بدء جلسة RDP جديدة يكفي أمر واحد: `python setup.py` — يجهّز الأدوات **ويسترجع تلقائياً آخر نسخة احتياطية صالحة من Google Drive** قبل أن تبدأ التحليل. لا حاجة لتشغيل أي سكربت استرجاع يدوياً.
 
 ## 📂 هيكل المشروع
-- `setup.py`: تجهيز البيئة بالكامل (المجلدات، تنزيل APK وأصول CDN من Google Drive، استنساخ الأدوات).
+- `setup.py`: تجهيز البيئة + **استرجاع الجلسة تلقائياً** من `gdrive:GameRevBackup/` + تنزيل ما ينقص من ملفات اللعبة.
+- `backup.py`: نسخ احتياطي لـ `workspace/input/` **و** `workspace/output/` إلى Google Drive (يدوي أو دوري). ويحتوي الدوال المشتركة (rclone، التحقق من الـ manifest، المسارات الآمنة).
 - `AGENTS.md`: تعليمات الوكيل (Antigravity) لسير العمل وقواعد التحليل.
-- `backup.py`: ضغط `workspace/output/` ورفعه إلى Google Drive عبر `rclone`.
-- `workspace/input/`: ملفات الإدخال الخام (`game.apk`, `assets.zip`). مستبعد من Git عبر `.gitignore`.
-- `workspace/output/`: نتائج ومخرجات التحليل (مستبعد من Git أيضاً، لذا استخدم `backup.py`).
-- `tools/`: أدوات التحليل المستنسخة تلقائياً:
-  - [REA](https://github.com/morluto/rea)
-  - [AssetRipper](https://github.com/AssetRipper/AssetRipper) (مصدر، يحتاج .NET SDK للبناء)
-  - [JADX](https://github.com/skylot/jadx) (يُنزَّل تلقائياً، يحتاج JDK)
-  - [Il2CppDumper](https://github.com/Perfare/Il2CppDumper) (يُنزَّل تلقائياً، لألعاب Unity بنمط IL2CPP)
+- `workspace/input/`: ملفات الإدخال (`game.apk`, `assets.zip`, ...). مستبعد من Git.
+- `workspace/output/`: نتائج التحليل. مستبعد من Git (احميه عبر `backup.py`).
+- `tools/`: أدوات التحليل ([REA](https://github.com/morluto/rea), [AssetRipper](https://github.com/AssetRipper/AssetRipper), [JADX](https://github.com/skylot/jadx), [Il2CppDumper](https://github.com/Perfare/Il2CppDumper)).
+- `tests/`: اختبارات الاسترجاع والنسخ الاحتياطي (تعمل دون إنترنت بواسطة rclone وهمي).
 
 ## 🚀 التشغيل في أي جلسة RDP جديدة
 ```bash
 python setup.py
 ```
-يفحص المتطلبات (git, node, java)، ينزّل الملفات عبر `gdown`، يجهّز الأدوات، ثم يكتشف هل اللعبة Unity بنمط IL2CPP أم Mono. (اللعبة الحالية: IL2CPP.) الملفات الموجودة مسبقاً تُتخطى.
+### ما الذي يحدث (بهذا الترتيب بالضبط)
+| # | الخطوة |
+|---|--------|
+| 1 | تجهيز مجلدات `workspace/input`, `workspace/output`, `tools` |
+| 2 | تثبيت وفحص أدوات التحليل (git, node, java, REA, AssetRipper, JADX, Il2CppDumper) |
+| 3 | التحقق من تثبيت `rclone` |
+| 4 | التحقق من وجود الـ remote المسمّى `gdrive` |
+| 5 | الاتصال بـ `gdrive:GameRevBackup/` |
+| 6 | سرد النسخ المتوفرة |
+| 7 | تحديد أحدث نسخة **صالحة** بالـ manifest والطابع الزمني |
+| 8 | تنزيل الأرشيف والـ manifest إلى `workspace/.recovery_tmp/` |
+| 9 | التحقق من SHA-256 وسلامة ZIP |
+| 10 | التحقق من مسارات الأرشيف (منع path traversal، المسارات المطلقة، الأسماء المكررة، الروابط الرمزية، أي ملف غير مذكور في الـ manifest) |
+| 11 | الاستخراج إلى مجلد staging مؤقت (يُتحقق من SHA-256 لكل ملف) |
+| 12 | استرجاع `input/` و`output/` |
+| 13 | التحقق من عدد الملفات وأحجامها |
+| 14 | حذف الملفات المؤقتة **فقط بعد نجاح الاسترجاع والتحقق** |
+| 15 | عرض ملخص الاسترجاع |
 
-**خطوة يدوية لمرة واحدة:** لربط REA بالوكيل شغّل من مجلد خارج المشروع:
-```bash
-npx rea-agents setup
+بعدها يُنزَّل من Drive (عبر `gdown`) ما ينقص من `game.apk` و`assets.zip` فقط (الموجود مسترجَعاً يُتخطى) ويُكتشف نمط Unity (IL2CPP/Mono).
+
+### الملخص النهائي
 ```
-يتطلب Node.js 22.23.4+ أو 24.22.1+ أو 26.12.1+.
+GAME REV PROJECT — SESSION RECOVERY
+
+Google Drive: CONNECTED / FAILED
+Latest backup: TIMESTAMP
+Backup verification: PASSED / FAILED
+Input files restored: COUNT
+Output files restored: COUNT
+Recovery status: SUCCESS / PARTIAL / FAILED
+```
+| الحالة | المعنى | رمز الخروج |
+|--------|--------|-----------|
+| `SUCCESS` | استُرجعت نسخة صالحة وتم التحقق منها بالكامل | 0 |
+| `PARTIAL` | تم الاسترجاع لكن يلزمك انتباه: (أ) ملفات محلية متعارضة حُفظت كما هي، و/أو (ب) النسخة الأحدث كانت تالفة فاستُرجعت نسخة أقدم (قد ينقصك عمل حديث) | 1 |
+| `FAILED` | لم يتم الاسترجاع (Drive غير متاح، لا مصادقة، كل النسخ تالفة، أو فشل التحقق بعد الاسترجاع) — **لا تبدأ التحليل** | 2 |
+
+لا تُعرض حالة النجاح إلا بعد اكتمال التحقق (الخطوة 13). عند الفشل تُحفظ الملفات المؤقتة في `workspace/.recovery_tmp/` للفحص.
+`Backup verification` يظهر `NOT PERFORMED` إن تعذّر الوصول إلى Drive أصلاً (لم يُتحقق من شيء).
+
+### أول تشغيل (لا توجد نسخ)
+إن كان Drive متصلاً ولا توجد أي نسخ، يُعرض بوضوح `FIRST RUN`، وتُجهَّز مساحة عمل نظيفة ويُتابع الإعداد العادي. **هذا ليس خطأ** (رمز الخروج 0).
+أما إن وُجدت ملفات نسخ لكن لا صالح بينها (ناقصة/تالفة/صيغة قديمة) فهذا **ليس** أول تشغيل: الحالة `FAILED`.
+
+## 🛡️ قواعد الأمان في الاسترجاع
+- **لا يُحذف أي ملف موجود** في `workspace/` ولا يُستبدل أي ملف بصمت.
+- مساحة فارغة ← استرجاع تلقائي كامل.
+- إن وُجدت ملفات: تُقارَن بالـ SHA-256. المطابق يُعدّ مسترجَعاً، والمفقود يُضاف، والمتعارض **يبقى ملفك المحلي كما هو** وتُحفظ نسخة Drive في `workspace/recovery_conflicts/<طابع النسخة>/<input|output>/...` مع `CONFLICTS.json` (الحالة `PARTIAL`). قارنهما يدوياً ثم اقرر.
+- ملف محلي في طريقه (مجلد/رابط رمزي/ملف بدل مجلد) يُعامَل كتعارض أيضاً، ولا يُكتب عبر رابط رمزي خارج `workspace`.
+- نسخة تالفة (SHA-256 غير مطابق، ZIP تالف، manifest غير صالح، مسارات خطرة) ← تُجرَّب النسخة الأقدم الصالحة تلقائياً.
+- Drive غير متاح/المصادقة مفقودة ← رسالة واضحة + تعليمات + `FAILED`؛ لا تُنشأ مساحة فارغة بصمت.
+- **الاسترجاع قابل للاستئناف**: لو انقطعت الجلسة أثناء الاسترجاع (Ctrl+C أو إغلاق RDP)، أعد `python setup.py`؛ الملفات التي وُضعت تُتحقق ولا تتكرر ولا تُعدّ تعارضاً.
+
+## 🔑 المصادقة مع Google Drive (مهم)
+- يُعاد استخدام الـ remote الموجود في rclone باسم **`gdrive`**. لا تُخزَّن أي أسرار OAuth في المشروع، و`.gitignore` يستبعد `rclone.conf` و`token*.json`. **لا ترفع إعدادات rclone أو التوكن إلى Git أبداً.**
+- جهاز RDP يُدمَّر، فتضيع إعدادات rclone معه. **لا يُفترض أن المصادقة محفوظة**: في كل جهاز جديد يجب أن يكون rclone مثبتاً ومربوطاً قبل `python setup.py`، وإلا يعرض السكربت التعليمات ويُنهي الاسترجاع بـ `FAILED`.
+```bash
+# مرة لكل جهاز جديد
+winget install Rclone.Rclone          # أو https://rclone.org/install/
+rclone config                          # n → name: gdrive → storage: drive → اتبع المعالج
+# بدون متصفح على RDP: على جهازك المحلي شغّل  rclone authorize "drive"  والصق التوكن عند config_token>
+# توكن منتهٍ:  rclone config reconnect gdrive:
+```
+احتفظ بـ `rclone.conf` (مكانه: `rclone config file`) في مكان خاص بك خارج المستودع (مثل مدير كلمات المرور) إن أردت نسخه إلى كل جهاز جديد.
+
+## 💾 النسخ الاحتياطي (`backup.py`)
+```bash
+python backup.py                    # نسخة الآن
+يبدأ تلقائياً بعد نجاح setup.py؛ ويمكن تشغيله يدوياً بالأمر: python backup.py --watch            # نسخ دوري تلقائي (كل 900 ثانية، الحد الأدنى 60)
+يبدأ تلقائياً بعد نجاح setup.py؛ ويمكن تشغيله يدوياً بالأمر: python backup.py --watch --interval 600
+```
+- يشغَّل `--watch` في طرفية منفصلة أثناء العمل؛ **لا يبدأ تلقائياً من `setup.py`**. يتخطى الدورة إن لم يتغير شيء، ويستمر رغم أي فشل عابر.
+- يحفظ **input و output معاً** في أرشيف مؤرَّخ `gamerev_backup_YYYYMMDDTHHMMSSZ.zip` (UTC) + `gamerev_backup_...manifest.json` (الحجم، SHA-256 للأرشيف ولكل ملف، العدد لكل مجلد).
+- قبل الرفع: التحقق من سلامة ZIP ومطابقة محتواه للـ manifest وحساب SHA-256.
+- يُرفع الأرشيف أولاً ثم الـ manifest، ويُتحقق من حجم كل ملف على Drive بعد الرفع. وجود الـ manifest = النسخة مكتملة (النسخة بلا manifest تُتجاهل عند الاسترجاع).
+- **النسخ السابقة لا تُحذف أبداً** (إدارة المساحة على Drive مسؤوليتك).
+- إعادة المحاولة: 3 محاولات لكل ملف مع انتظار متزايد؛ عند الفشل النهائي تبقى النسخة المتحقَّق منها في `workspace/backups_pending/` للرفع اليدوي.
+- يستثني من **output فقط**: `libil2cpp.so`, `global-metadata.dat`, `libunity.so`, `libmain.so` وملفات `.apk` (نسخ من محتوى الـ APK). مجلد **input يُنسخ كاملاً** (بما فيه `game.apk` و`assets.zip`)، فقد تكون النسخة كبيرة؛ لهذا يتخطى `--watch` الدورات غير المتغيرة.
+- المجلدات الفارغة لا تُحفظ؛ الروابط الرمزية تُتجاهل؛ أي اسم ملف لا يمكن استرجاعه بأمان (يحوي `:` مثلاً) يُتخطى مع تحذير ويُسجَّل في `skipped` داخل الـ manifest.
 
 ## 🔍 سير العمل
-1. شغّل `python setup.py`.
-2. افتح المجلد في Antigravity واطلب منه تحليل `workspace/input/`.
-3. احفظ النتائج في `workspace/output/`.
-4. قبل إغلاق الجلسة شغّل `python backup.py`.
+1. جلسة RDP جديدة ← `python setup.py` (يسترجع عملك السابق).
+2. تحقق من الملخص: يجب أن تكون الحالة `SUCCESS` (أو `FIRST RUN`)؛ عند `PARTIAL` راجع التعارضات/النسخة الأقدم؛ عند `FAILED` أصلح المشكلة وأعد التشغيل.
+3. شغّل `يبدأ تلقائياً بعد نجاح setup.py؛ ويمكن تشغيله يدوياً بالأمر: python backup.py --watch` في طرفية أخرى.
+4. افتح المجلد في Antigravity واطلب تحليل `workspace/input/`، واحفظ النتائج في `workspace/output/`.
+5. قبل إغلاق الجلسة شغّل `python backup.py` مرة أخيرة (إن لم يكن `--watch` يعمل).
 
-## 💾 النسخ الاحتياطي (مرة واحدة لكل جلسة)
-1. ثبّت [rclone](https://rclone.org/install/).
-2. شغّل `rclone config` وأنشئ remote باسم `gdrive`.
-3. شغّل `python backup.py`.
+**خطوة يدوية لمرة واحدة:** لربط REA بالوكيل شغّل من مجلد خارج المشروع `npx rea-agents setup` (Node.js 22.23.4+ أو 24.22.1+ أو 26.12.1+).
 
-النسخ الاحتياطي يستثني `libil2cpp.so` و`global-metadata.dat` لأنهما موجودان أصلاً في الـ APK.
+خيارات `setup.py` للعمل دون إنترنت: `--skip-tools` و `--skip-game-download`.
 
-لاسترجاع المخرجات في جلسة جديدة: ارفع `outputs_backup.zip` إلى Drive، وضع معرّفه في `OUTPUTS_BACKUP_ID` داخل `setup.py`.
+## 🧪 الاختبارات
+```bash
+python -m unittest discover -s tests -v
+```
+تغطي: استرجاع مساحة جديدة، وجود ملفات وتعارضات، أرشيف أحدث تالف، Drive غير متاح، مصادقة/remote/rclone مفقود، تاريخ نسخ فارغ، عدم تطابق SHA-256، أسماء مكررة وملفات متعارضة ومسارات خطرة، استرجاع منقطع (بما فيه قتل العملية فعلياً)، وإعادة المحاولة والنسخ الدوري. **تستخدم `tests/mock_rclone.py` بدل rclone وGoogle Drive الحقيقيين** (مجلد محلي يمثل Drive)، فنجاحها لا يثبت سلوك Drive الفعلي — جرّب أول استرجاع حقيقي بنفسك.
+
+## 🔁 الترحيل من الصيغة القديمة
+النسخة القديمة (`outputs_backup.zip` فقط بدون manifest) **لا تُسترجع تلقائياً** لأنها لا تحمل SHA-256 ولا تُغطي input. ستظهر كتنبيه وتكون الحالة `FAILED` إن لم توجد نسخة جديدة. للترحيل: نزّلها يدوياً (`rclone copyto gdrive:GameRevBackup/outputs_backup.zip outputs_backup.zip`)، فُكّها داخل `workspace/output/`، ثم شغّل `python backup.py` لإنشاء أول نسخة بالصيغة الجديدة. المتغير `OUTPUTS_BACKUP_ID` في `setup.py` لم يعد مستخدماً.
 
 ## ⚠️ ملاحظة
 هذا المشروع لأغراض التعلم فقط. لا تعِد نشر أصول اللعبة أو الكود المستخرج منها، ولا تستخدمه لتجاوز الحماية أو للغش في الألعاب الأونلاين.
+
+
+## مراقب النسخ الاحتياطي (محدّث)
+
+بعد نجاح `python setup.py` يبدأ مراقب النسخ في الخلفية تلقائياً كل 300 ثانية.
+
+```powershell
+python backup.py --status   # حالة المراقب وعدد النسخ المعلّقة
+python backup.py --stop     # طلب إيقاف آمن للمراقب
+python backup.py            # نسخة فورية الآن
+python backup.py --watch    # تشغيل يدوي عند الحاجة
+```
+
+تُنشأ كل نسخة أولاً داخل مجلد مستقل دائم تحت `workspace/backups_pending/`. عند تعذر Google Drive تبقى النسخة محلياً، وتحاول الدورات التالية رفع النسخ المعلّقة الأقدم. لا يُحذف مجلد النسخة المحلية إلا بعد رفع الأرشيف والـ manifest والتحقق من محتوى الملف البعيد باستخدام `rclone check --download`.
+
+**مهم:** يجب إعداد rclone remote باسم `gdrive` على كل جهاز RDP جديد. لا ترفع `rclone.conf` أو رموز OAuth إلى GitHub.
